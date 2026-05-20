@@ -71,7 +71,8 @@ export function useRegistros(filtros = {}) {
   useEffect(() => { fetch() }, [fetch])
 
   const registrarPonto = async (funcId, tipo, extras = {}) => {
-    const hoje = new Date().toISOString().slice(0, 10)
+    const d = new Date()
+    const hoje = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     const hora = (() => { const n = new Date(); return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}` })()
 
     const { data: existing } = await supabase
@@ -120,7 +121,7 @@ export function useRegistros(filtros = {}) {
     return true
   }
 
-  const getTodayRec = (funcId) => data.find(r => r.func_id === funcId && r.data === new Date().toISOString().slice(0, 10))
+  const getTodayRec = (funcId) => { const d = new Date(); const hj = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return data.find(r => r.func_id === funcId && r.data === hj) }
 
   return { registros: data, loading, refetch: fetch, registrarPonto, atualizar, excluir, getTodayRec }
 }

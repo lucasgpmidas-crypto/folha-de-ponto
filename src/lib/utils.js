@@ -2,7 +2,7 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 export const pad   = n => String(n).padStart(2, '0')
-export const hoje  = () => new Date().toISOString().slice(0, 10)
+export const hoje  = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` }
 export const agora = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}` }
 
 export const fmtData = (d) => {

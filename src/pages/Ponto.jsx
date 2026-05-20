@@ -30,6 +30,12 @@ export default function Ponto() {
   }, [])
 
   useEffect(() => {
+    return () => {
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    }
+  }, [])
+
+  useEffect(() => {
     checkLocation()
   }, [config])
 
