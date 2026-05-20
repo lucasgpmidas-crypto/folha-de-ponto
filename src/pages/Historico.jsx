@@ -56,7 +56,7 @@ export default function Historico() {
         <div className="stat-card sc-gold"><div className="stat-label">Dias Registrados</div><div className="stat-value sv-gold">{totalDias}</div></div>
         <div className="stat-card sc-green"><div className="stat-label">Total de Horas</div><div className="stat-value sv-green" style={{ fontSize: 20 }}>{fmtMin(totalMin)}</div></div>
         <div className="stat-card sc-blue"><div className="stat-label">Dias Completos</div><div className="stat-value sv-blue">{diasCompletos}</div></div>
-        <div className="stat-card sc-amber"><div className="stat-label">Média/Dia</div><div className="stat-value sv-amber" style={{ fontSize: 20 }}>{totalDias ? fmtMin(Math.round(totalMin / diasCompletos || 0)) : '—'}</div></div>
+        <div className="stat-card sc-amber"><div className="stat-label">Média/Dia</div><div className="stat-value sv-amber" style={{ fontSize: 20 }}>{diasCompletos > 0 ? fmtMin(Math.round(totalMin / diasCompletos)) : '—'}</div></div>
         <div className="stat-card sc-blue"><div className="stat-label">Horas Extras</div><div className="stat-value sv-blue" style={{ fontSize: 20 }}>{totalExtras > 0 ? '+' + fmtMin(totalExtras) : '—'}</div></div>
         <div className="stat-card" style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)' }}><div className="stat-label">Horas Devidas</div><div className="stat-value" style={{ color: 'var(--red)', fontSize: 20 }}>{totalDevidas > 0 ? fmtMin(totalDevidas) : '—'}</div></div>
       </div>

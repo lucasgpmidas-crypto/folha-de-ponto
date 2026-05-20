@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { useRegistros, useFuncionarios } from '../lib/hooks'
+import { useRegistros, useFuncionarios, useConfig } from '../lib/hooks'
 import { hoje, fmtMin, calcMin, calcStatus, fmtData, getIniciais, avatarCor } from '../lib/utils'
 import Modal from '../components/Modal'
 
@@ -11,6 +11,9 @@ export default function Gestor() {
   const [editando, setEditando] = useState(null)
   const [selectedSelfie, setSelectedSelfie] = useState(null)
   const [saving, setSaving] = useState(false)
+
+  const { config } = useConfig()
+  const jornadaMin = parseInt(config.jornada_horas || '8') * 60
 
   const ativos = funcionarios.filter(f => f.ativo)
   const comRegistro = registros.length
@@ -63,7 +66,7 @@ export default function Gestor() {
             ? <div className="empty-state"><div className="es-icon">📭</div><div className="es-text">Nenhum registro hoje</div></div>
             : registros.map(r => {
                 const min = calcMin(r)
-                const status = min !== null ? calcStatus(r) : null
+                const status = min !== null ? calcStatus(r, jornadaMin) : null
                 return (
                   <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 14, marginBottom: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>

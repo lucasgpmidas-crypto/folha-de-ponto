@@ -25,7 +25,7 @@ export default function Ponto() {
   const selfieObrigatoria = config.selfie_obrigatoria === 'true'
 
   useEffect(() => {
-    const t = setInterval(() => setClock(agora()), 10000)
+    const t = setInterval(() => setClock(agora()), 60000)
     return () => clearInterval(t)
   }, [])
 
