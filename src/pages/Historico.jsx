@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { format, subDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useAuth } from '../lib/auth'
-import { useRegistros } from '../lib/hooks'
+import { useRegistros, useConfig } from '../lib/hooks'
 import { fmtData, fmtMin, calcMin, calcStatus, hoje, exportCSV } from '../lib/utils'
 
 export default function Historico() {
@@ -11,19 +11,29 @@ export default function Historico() {
   const [periodo, setPeriodo] = useState('30')
   const ini = format(subDays(new Date(), Number(periodo)), 'yyyy-MM-dd')
   const { registros, loading } = useRegistros({ funcId, dataInicio: ini, dataFim: hoje() })
+  const { config } = useConfig()
+  const jornadaMin = parseInt(config.jornada_horas || '8') * 60
 
-  const totalDias  = registros.length
-  const totalMin   = registros.reduce((s, r) => s + (calcMin(r) || 0), 0)
+  const totalDias     = registros.length
+  const totalMin      = registros.reduce((s, r) => s + (calcMin(r) || 0), 0)
   const diasCompletos = registros.filter(r => r.entrada && r.saida).length
+  const totalExtras   = registros.reduce((s, r) => { const st = calcStatus(r, jornadaMin); return s + (st && st.min > 0 ? st.min : 0) }, 0)
+  const totalDevidas  = registros.reduce((s, r) => { const st = calcStatus(r, jornadaMin); return s + (st && st.min < 0 ? Math.abs(st.min) : 0) }, 0)
 
   const handleExportar = () => {
     exportCSV(
-      [['Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'GPS', 'Obs.'],
-       ...registros.map(r => [
-         fmtData(r.data),
-         r.entrada || '—', r.intervalo || '—', r.retorno || '—', r.saida || '—',
-         fmtMin(calcMin(r)), r.gps_ok ? 'Sim' : 'Não', r.obs || ''
-       ])],
+      [['Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'Extras', 'Devidas', 'GPS', 'Obs.'],
+       ...registros.map(r => {
+         const st = calcStatus(r, jornadaMin)
+         return [
+           fmtData(r.data),
+           r.entrada || '—', r.intervalo || '—', r.retorno || '—', r.saida || '—',
+           fmtMin(calcMin(r)),
+           st && st.min > 0 ? fmtMin(st.min) : '—',
+           st && st.min < 0 ? fmtMin(Math.abs(st.min)) : '—',
+           r.gps_ok ? 'Sim' : 'Não', r.obs || ''
+         ]
+       })],
       `ponto_${funcSession?.nome?.replace(/\s/g, '_')}_${periodo}d.csv`
     )
   }
@@ -47,6 +57,8 @@ export default function Historico() {
         <div className="stat-card sc-green"><div className="stat-label">Total de Horas</div><div className="stat-value sv-green" style={{ fontSize: 20 }}>{fmtMin(totalMin)}</div></div>
         <div className="stat-card sc-blue"><div className="stat-label">Dias Completos</div><div className="stat-value sv-blue">{diasCompletos}</div></div>
         <div className="stat-card sc-amber"><div className="stat-label">Média/Dia</div><div className="stat-value sv-amber" style={{ fontSize: 20 }}>{totalDias ? fmtMin(Math.round(totalMin / diasCompletos || 0)) : '—'}</div></div>
+        <div className="stat-card sc-blue"><div className="stat-label">Horas Extras</div><div className="stat-value sv-blue" style={{ fontSize: 20 }}>{totalExtras > 0 ? '+' + fmtMin(totalExtras) : '—'}</div></div>
+        <div className="stat-card" style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)' }}><div className="stat-label">Horas Devidas</div><div className="stat-value" style={{ color: 'var(--red)', fontSize: 20 }}>{totalDevidas > 0 ? fmtMin(totalDevidas) : '—'}</div></div>
       </div>
 
       <div className="card">
@@ -56,7 +68,7 @@ export default function Historico() {
             ? <div className="empty-state"><div className="es-icon">📭</div><div className="es-text">Sem registros no período</div></div>
             : registros.map(r => {
                 const min = calcMin(r)
-                const status = min !== null ? calcStatus(r, parseInt('8') * 60) : null
+                const status = min !== null ? calcStatus(r, jornadaMin) : null
                 return (
                   <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 12, marginBottom: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -72,7 +84,9 @@ export default function Historico() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         {min !== null && <div style={{ fontFamily: 'Barlow Condensed,sans-serif', fontSize: 20, fontWeight: 800, color: status?.cor || 'var(--text)' }}>{fmtMin(min)}</div>}
-                        {status && <div style={{ fontSize: 11, color: status.cor }}>{status.label}</div>}
+                        {status && status.min === 0 && <div style={{ fontSize: 11, color: status.cor }}>Exato</div>}
+                        {status && status.min > 0 && <div style={{ fontSize: 11, color: status.cor }}>+{fmtMin(status.min)} extra</div>}
+                        {status && status.min < 0 && <div style={{ fontSize: 11, color: status.cor }}>{fmtMin(Math.abs(status.min))} devida</div>}
                       </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { format, subDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { useRegistros, useFuncionarios } from '../lib/hooks'
-import { hoje, fmtData, fmtMin, calcMin, exportCSV } from '../lib/utils'
+import { useRegistros, useFuncionarios, useConfig } from '../lib/hooks'
+import { hoje, fmtData, fmtMin, calcMin, calcStatus, exportCSV } from '../lib/utils'
 
 export default function Relatorios() {
   const [aba, setAba] = useState('diario')
@@ -12,6 +12,8 @@ export default function Relatorios() {
   const [periodo, setPeriodo] = useState('30')
 
   const { funcionarios } = useFuncionarios()
+  const { config } = useConfig()
+  const jornadaMin = parseInt(config.jornada_horas || '8') * 60
   const ini30 = format(subDays(new Date(), Number(periodo)), 'yyyy-MM-dd')
 
   const { registros: regsDia }   = useRegistros({ data })
@@ -27,16 +29,28 @@ export default function Relatorios() {
   )
 
   const exportarMes = () => exportCSV(
-    [['Funcionário', 'Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'GPS'],
-     ...regsMes.map(r => [r.funcionarios?.nome, fmtData(r.data), r.entrada||'—', r.intervalo||'—', r.retorno||'—', r.saida||'—', fmtMin(calcMin(r)), r.gps_ok?'Sim':'Não'])],
+    [['Funcionário', 'Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'Extras', 'Devidas', 'GPS'],
+     ...regsMes.map(r => {
+       const st = calcStatus(r, jornadaMin)
+       return [r.funcionarios?.nome, fmtData(r.data), r.entrada||'—', r.intervalo||'—', r.retorno||'—', r.saida||'—', fmtMin(calcMin(r)),
+         st && st.min > 0 ? fmtMin(st.min) : '—',
+         st && st.min < 0 ? fmtMin(Math.abs(st.min)) : '—',
+         r.gps_ok?'Sim':'Não']
+     })],
     `ponto_mensal_${mes}.csv`
   )
 
   const exportarInd = () => {
     if (!f) return
     exportCSV(
-      [['Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'GPS', 'Obs.'],
-       ...regsInd.map(r => [fmtData(r.data), r.entrada||'—', r.intervalo||'—', r.retorno||'—', r.saida||'—', fmtMin(calcMin(r)), r.gps_ok?'Sim':'Não', r.obs||''])],
+      [['Data', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Horas', 'Extras', 'Devidas', 'GPS', 'Obs.'],
+       ...regsInd.map(r => {
+         const st = calcStatus(r, jornadaMin)
+         return [fmtData(r.data), r.entrada||'—', r.intervalo||'—', r.retorno||'—', r.saida||'—', fmtMin(calcMin(r)),
+           st && st.min > 0 ? fmtMin(st.min) : '—',
+           st && st.min < 0 ? fmtMin(Math.abs(st.min)) : '—',
+           r.gps_ok?'Sim':'Não', r.obs||'']
+       })],
       `ponto_${f.nome.replace(/\s/g,'_')}_${periodo}d.csv`
     )
   }
@@ -97,18 +111,23 @@ export default function Relatorios() {
                 <div className="card-title">{regsMes.length} registros</div>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Funcionário</th><th>Data</th><th>Entrada</th><th>Saída</th><th>Horas</th><th>GPS</th></tr></thead>
+                    <thead><tr><th>Funcionário</th><th>Data</th><th>Entrada</th><th>Saída</th><th>Horas</th><th>Extras</th><th>Devidas</th><th>GPS</th></tr></thead>
                     <tbody>
-                      {regsMes.map(r => (
-                        <tr key={r.id}>
-                          <td><strong>{r.funcionarios?.nome}</strong></td>
-                          <td>{fmtData(r.data)}</td>
-                          <td>{r.entrada || '—'}</td>
-                          <td>{r.saida || '—'}</td>
-                          <td style={{ color: 'var(--green)', fontWeight: 700 }}>{fmtMin(calcMin(r))}</td>
-                          <td>{r.gps_ok ? '✅' : '—'}</td>
-                        </tr>
-                      ))}
+                      {regsMes.map(r => {
+                        const st = calcStatus(r, jornadaMin)
+                        return (
+                          <tr key={r.id}>
+                            <td><strong>{r.funcionarios?.nome}</strong></td>
+                            <td>{fmtData(r.data)}</td>
+                            <td>{r.entrada || '—'}</td>
+                            <td>{r.saida || '—'}</td>
+                            <td style={{ color: 'var(--green)', fontWeight: 700 }}>{fmtMin(calcMin(r))}</td>
+                            <td style={{ color: 'var(--blue)', fontWeight: 700 }}>{st && st.min > 0 ? '+' + fmtMin(st.min) : '—'}</td>
+                            <td style={{ color: 'var(--red)', fontWeight: 700 }}>{st && st.min < 0 ? fmtMin(Math.abs(st.min)) : '—'}</td>
+                            <td>{r.gps_ok ? '✅' : '—'}</td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -143,19 +162,40 @@ export default function Relatorios() {
               ? <div className="empty-state"><div className="es-icon">📭</div><div className="es-text">Sem registros no período</div></div>
               : <div className="card">
                   <div className="card-title">{f?.nome} — {regsInd.length} dias · {fmtMin(regsInd.reduce((s,r) => s+(calcMin(r)||0), 0))} total</div>
-                  {regsInd.map(r => (
-                    <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>
-                          {format(new Date(r.data+'T12:00'),"EEE dd/MM",{locale:ptBR})}
-                        </span>
-                        <span style={{ color: 'var(--green)', fontWeight: 700 }}>{fmtMin(calcMin(r))}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text3)' }}>
-                        {[['🟢',r.entrada],['🟡',r.intervalo],['🔵',r.retorno],['🔴',r.saida]].map(([ic,v],i) => <span key={i}>{ic} {v||'—'}</span>)}
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                    <div style={{ flex: 1, background: 'rgba(59,130,246,.1)', border: '1px solid rgba(59,130,246,.25)', borderRadius: 10, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>Horas Extras</div>
+                      <div style={{ fontWeight: 800, color: 'var(--blue)', fontSize: 18 }}>
+                        {(() => { const t = regsInd.reduce((s,r) => { const st = calcStatus(r,jornadaMin); return s+(st&&st.min>0?st.min:0) },0); return t>0?'+'+fmtMin(t):'—' })()}
                       </div>
                     </div>
-                  ))}
+                    <div style={{ flex: 1, background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 10, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>Horas Devidas</div>
+                      <div style={{ fontWeight: 800, color: 'var(--red)', fontSize: 18 }}>
+                        {(() => { const t = regsInd.reduce((s,r) => { const st = calcStatus(r,jornadaMin); return s+(st&&st.min<0?Math.abs(st.min):0) },0); return t>0?fmtMin(t):'—' })()}
+                      </div>
+                    </div>
+                  </div>
+                  {regsInd.map(r => {
+                    const st = calcStatus(r, jornadaMin)
+                    return (
+                      <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>
+                            {format(new Date(r.data+'T12:00'),"EEE dd/MM",{locale:ptBR})}
+                          </span>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: 'var(--green)', fontWeight: 700 }}>{fmtMin(calcMin(r))}</div>
+                            {st && st.min > 0 && <div style={{ fontSize: 11, color: 'var(--blue)' }}>+{fmtMin(st.min)} extra</div>}
+                            {st && st.min < 0 && <div style={{ fontSize: 11, color: 'var(--red)' }}>{fmtMin(Math.abs(st.min))} devida</div>}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text3)' }}>
+                          {[['🟢',r.entrada],['🟡',r.intervalo],['🔵',r.retorno],['🔴',r.saida]].map(([ic,v],i) => <span key={i}>{ic} {v||'—'}</span>)}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
           }
         </div>
