@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
@@ -8,15 +8,56 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [funcId, setFuncId] = useState('')
-  const [pin, setPin] = useState('')
+  const [pinDigits, setPinDigits] = useState(['', '', '', ''])
   const [loading, setLoading] = useState(false)
   const [funcs, setFuncs] = useState([])
   const [erro, setErro] = useState('')
+  const pinRefs = useRef([])
 
   useEffect(() => {
     supabase.from('funcionarios').select('id,nome,pin,ativo').eq('ativo', true).order('nome')
       .then(({ data }) => setFuncs(data || []))
   }, [])
+
+  useEffect(() => {
+    setPinDigits(['', '', '', ''])
+    setErro('')
+  }, [modo])
+
+  const pin = pinDigits.join('')
+
+  const handlePinChange = (index, value) => {
+    const v = value.replace(/\D/g, '').slice(-1)
+    const next = [...pinDigits]
+    next[index] = v
+    setPinDigits(next)
+    if (v && index < 3) pinRefs.current[index + 1]?.focus()
+  }
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (pinDigits[index]) {
+        const next = [...pinDigits]
+        next[index] = ''
+        setPinDigits(next)
+      } else if (index > 0) {
+        const next = [...pinDigits]
+        next[index - 1] = ''
+        setPinDigits(next)
+        pinRefs.current[index - 1]?.focus()
+      }
+    }
+  }
+
+  const handlePinPaste = (e) => {
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4)
+    if (!text.length) return
+    e.preventDefault()
+    const next = ['', '', '', '']
+    for (let i = 0; i < text.length; i++) next[i] = text[i]
+    setPinDigits(next)
+    pinRefs.current[Math.min(text.length, 3)]?.focus()
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -73,10 +114,25 @@ export default function Login() {
                   {funcs.map(f => <option key={f.id} value={f.id}>{f.nome}{!f.pin ? ' (sem PIN)' : ''}</option>)}
                 </select>
               </div>
-              <div className="fg" style={{ textAlign: 'left' }}>
+              <div className="fg">
                 <label>PIN (4 dígitos)</label>
-                <input type="password" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  maxLength={4} placeholder="••••" inputMode="numeric" className="pin-input" />
+                <div className="pin-digits">
+                  {pinDigits.map((d, i) => (
+                    <input
+                      key={i}
+                      ref={el => pinRefs.current[i] = el}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={d}
+                      onChange={e => handlePinChange(i, e.target.value)}
+                      onKeyDown={e => handlePinKeyDown(i, e)}
+                      onPaste={i === 0 ? handlePinPaste : undefined}
+                      className={`pin-digit${d ? ' filled' : ''}`}
+                      autoComplete="off"
+                    />
+                  ))}
+                </div>
               </div>
             </>
           )}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { useRegistros, useConfig } from '../lib/hooks'
-import { hoje, agora, fmtDataLonga, calcMin, fmtMin, gpsDistance, PUNCH_LABELS, PUNCH_ICONS, PUNCH_ORDER } from '../lib/utils'
+import { hoje, agora, fmtDataLonga, calcMin, fmtMin, toMin, gpsDistance, PUNCH_LABELS, PUNCH_ICONS, PUNCH_ORDER } from '../lib/utils'
 
 export default function Ponto() {
   const { funcSession } = useAuth()
@@ -11,10 +11,11 @@ export default function Ponto() {
 
   const [clock, setClock] = useState(agora())
   const [locState, setLocState] = useState({ gpsOk: false, wifiOk: false, lat: null, lng: null, checking: true, msg: 'Verificando localização...' })
-  const [step, setStep] = useState('idle') // idle | camera | confirm
+  const [step, setStep] = useState('idle')
   const [pendingPunch, setPendingPunch] = useState(null)
   const [capturedSelfie, setCapturedSelfie] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [lastPunched, setLastPunched] = useState(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const canvasRef = useRef(null)
@@ -38,6 +39,28 @@ export default function Ponto() {
   useEffect(() => {
     checkLocation()
   }, [config])
+
+  const calcMinAtual = () => {
+    if (!rec?.entrada) return 0
+    if (rec.saida) return calcMin(rec) ?? 0
+    const [h, m] = clock.split(':').map(Number)
+    const agoraMin = h * 60 + m
+    let elapsed = agoraMin - (toMin(rec.entrada) ?? 0)
+    if (rec.intervalo && rec.retorno) {
+      elapsed -= (toMin(rec.retorno) ?? 0) - (toMin(rec.intervalo) ?? 0)
+    } else if (rec.intervalo && !rec.retorno) {
+      elapsed -= agoraMin - (toMin(rec.intervalo) ?? 0)
+    }
+    return Math.max(0, elapsed)
+  }
+
+  const minAtual = rec?.entrada ? calcMinAtual() : 0
+  const progressoPct = jornadaMin > 0 ? Math.min(100, Math.round((minAtual / jornadaMin) * 100)) : 0
+  const progressoCor = progressoPct >= 100
+    ? 'var(--green)'
+    : progressoPct >= 75
+    ? 'var(--amber)'
+    : 'linear-gradient(90deg,var(--gd),var(--gl))'
 
   const checkLocation = () => {
     setLocState(s => ({ ...s, checking: true, msg: 'Verificando localização...' }))
@@ -123,7 +146,8 @@ export default function Ponto() {
   const confirmarPonto = async () => {
     if (!pendingPunch) return
     setSaving(true)
-    await registrarPonto(funcId, pendingPunch, {
+    const punch = pendingPunch
+    const ok = await registrarPonto(funcId, punch, {
       selfie: capturedSelfie,
       lat: locState.lat,
       lng: locState.lng,
@@ -132,10 +156,15 @@ export default function Ponto() {
     })
     setSaving(false)
     cancelFlow()
+    if (ok) {
+      setLastPunched(punch)
+      setTimeout(() => setLastPunched(null), 1000)
+    }
   }
 
-  const horasTrabalhadas = rec ? fmtMin(calcMin(rec)) : null
-  const completo = rec && rec.saida
+  const minFinal = rec ? calcMin(rec) : null
+  const horasTrabalhadas = minFinal !== null ? fmtMin(minFinal) : null
+  const completo = !!(rec && rec.saida)
 
   return (
     <div>
@@ -151,12 +180,33 @@ export default function Ponto() {
 
         <div className="ponto-slots">
           {PUNCH_ORDER.map(p => (
-            <div key={p} className={`ponto-slot ${rec?.[p] ? 'done' : p === next ? 'active' : ''}`}>
+            <div key={p} className={[
+              'ponto-slot',
+              rec?.[p] ? 'done' : p === next ? 'active' : '',
+              lastPunched === p ? 'just-punched' : '',
+            ].filter(Boolean).join(' ')}>
               <div className="slot-label">{PUNCH_ICONS[p]} {PUNCH_LABELS[p]}</div>
               <div className={`slot-time ${rec?.[p] ? 'done' : 'pending'}`}>{rec?.[p] || '-- : --'}</div>
             </div>
           ))}
         </div>
+
+        {rec?.entrada && (
+          <div className="jornada-progress-wrap">
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 5 }}>
+              <span>Progresso da jornada</span>
+              <span style={{ color: progressoPct >= 100 ? 'var(--green)' : 'var(--text2)', fontWeight: 600 }}>
+                {fmtMin(minAtual)} / {Math.floor(jornadaMin / 60)}h
+              </span>
+            </div>
+            <div className="jornada-bar-bg">
+              <div className="jornada-bar" style={{ width: `${progressoPct}%`, background: progressoCor }} />
+            </div>
+            <div style={{ fontSize: 10, marginTop: 3, textAlign: 'right', fontWeight: progressoPct >= 100 ? 700 : 400, color: progressoPct >= 100 ? 'var(--green)' : 'var(--text3)' }}>
+              {progressoPct >= 100 ? '✓ Jornada completa!' : `${progressoPct}%`}
+            </div>
+          </div>
+        )}
 
         {horasTrabalhadas && (
           <div style={{ background: 'var(--bg5)', borderRadius: 'var(--rs)', padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
